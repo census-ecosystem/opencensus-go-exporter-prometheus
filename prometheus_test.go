@@ -28,6 +28,7 @@ import (
 	"go.opencensus.io/tag"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type mSlice []*stats.Int64Measure
@@ -447,4 +448,89 @@ tests_foo{key_1="issue659",key_2="",key_3="issue659",key_4="",key_5="issue659"} 
 	if output != want {
 		t.Fatalf("output differed from expected output: %s want: %s", output, want)
 	}
+}
+
+func TestShareDefaultRegistry(t *testing.T) {
+	_, err := NewExporter(Options{
+		Registerer: prometheus.DefaultRegisterer,
+		Gatherer:   prometheus.DefaultGatherer,
+	})
+	if err != nil {
+		t.Fatalf("failed to create prometheus exporter: %v", err)
+	}
+	m := stats.Int64("tests/foo", "foo", stats.UnitDimensionless)
+	v := &view.View{
+		Name:        m.Name(),
+		Description: m.Description(),
+		Measure:     m,
+		Aggregation: view.Count(),
+	}
+	if err := view.Register(v); err != nil {
+		t.Fatalf("failed to create views: %v", err)
+	}
+	defer view.Unregister(v)
+	view.SetReportingPeriod(time.Millisecond)
+
+	stats.Record(context.Background(), m.M(1))
+
+	// counter, prometheus way
+	c := prometheus.NewCounter(prometheus.CounterOpts{Name: "prom_counter", Help: "Prometheus Counter"})
+	prometheus.MustRegister(c)
+
+	c.Add(1)
+
+	// Use prometheus handler
+	srv := httptest.NewServer(promhttp.Handler())
+	defer srv.Close()
+
+	var i int
+	var output string
+	for {
+		time.Sleep(10 * time.Millisecond)
+		if i == 1000 {
+			t.Fatal("no output at /metrics (10s wait)")
+		}
+		i++
+
+		resp, err := http.Get(srv.URL)
+		if err != nil {
+			t.Fatalf("failed to get /metrics: %v", err)
+		}
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("failed to read body: %v", err)
+		}
+		resp.Body.Close()
+
+		output = string(body)
+		if output != "" {
+			break
+		}
+	}
+
+	if strings.Contains(output, "collected before with the same name and label values") {
+		t.Fatal("metric name and labels being duplicated but must be unique")
+	}
+
+	if strings.Contains(output, "error(s) occurred") {
+		t.Fatal("error reported by prometheus registry")
+	}
+
+	wantOc := `# HELP tests_foo foo
+# TYPE tests_foo counter
+tests_foo 1
+`
+	if !strings.Contains(output, wantOc) {
+		t.Errorf("output does not contain opencensus counter. Output: %s want: %s", output, wantOc)
+	}
+
+	wantP := `# HELP prom_counter Prometheus Counter
+# TYPE prom_counter counter
+prom_counter 1
+`
+	if !strings.Contains(output, wantP) {
+		t.Errorf("output does not contain opencensus counter. Output: %s want: %s", output, wantP)
+	}
+
 }

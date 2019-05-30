@@ -74,8 +74,6 @@ func TestMetricsEndpointOutput(t *testing.T) {
 	}
 	defer view.Unregister(vc...)
 
-	view.SetReportingPeriod(time.Millisecond)
-
 	for _, m := range measures {
 		stats.Record(context.Background(), m.M(1))
 	}
@@ -87,8 +85,8 @@ func TestMetricsEndpointOutput(t *testing.T) {
 	var output string
 	for {
 		time.Sleep(10 * time.Millisecond)
-		if i == 1000 {
-			t.Fatal("no output at /metrics (10s wait)")
+		if i == 10 {
+			t.Fatal("no output at /metrics (100ms wait)")
 		}
 		i++
 
@@ -322,8 +320,6 @@ func TestConstLabelsIncluded(t *testing.T) {
 	}
 	defer view.Unregister(vc...)
 
-	view.SetReportingPeriod(time.Millisecond)
-
 	ctx, _ := tag.New(context.Background(), tag.Upsert(measureLabel, "issue961"))
 	for _, m := range measures {
 		stats.Record(ctx, m.M(1))
@@ -336,8 +332,8 @@ func TestConstLabelsIncluded(t *testing.T) {
 	var output string
 	for {
 		time.Sleep(10 * time.Millisecond)
-		if i == 1000 {
-			t.Fatal("no output at /metrics (10s wait)")
+		if i == 10 {
+			t.Fatal("no output at /metrics (100ms wait)")
 		}
 		i++
 
@@ -404,7 +400,6 @@ func TestViewMeasureWithoutTag(t *testing.T) {
 		t.Fatalf("failed to create views: %v", err)
 	}
 	defer view.Unregister(v)
-	view.SetReportingPeriod(time.Millisecond)
 	// Make a measure without some tags in the view.
 	ctx1, _ := tag.New(context.Background(), tag.Upsert(k4, "issue659"), tag.Upsert(randomKey, "value"), tag.Upsert(k2, "issue659"))
 	stats.Record(ctx1, m.M(1))
@@ -416,8 +411,8 @@ func TestViewMeasureWithoutTag(t *testing.T) {
 	var output string
 	for {
 		time.Sleep(10 * time.Millisecond)
-		if i == 1000 {
-			t.Fatal("no output at /metrics (10s wait)")
+		if i == 10 {
+			t.Fatal("no output at /metrics (100ms wait)")
 		}
 		i++
 		resp, err := http.Get(srv.URL)
@@ -486,7 +481,7 @@ func TestShareDefaultRegistry(t *testing.T) {
 	for {
 		time.Sleep(10 * time.Millisecond)
 		if i == 10 {
-			t.Fatal("no output at /metrics (10s wait)")
+			t.Fatal("no output at /metrics (100ms wait)")
 		}
 		i++
 

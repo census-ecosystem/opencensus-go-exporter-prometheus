@@ -469,8 +469,6 @@ func TestShareDefaultRegistry(t *testing.T) {
 		t.Fatalf("failed to create views: %v", err)
 	}
 	defer view.Unregister(v)
-	view.SetReportingPeriod(time.Millisecond)
-
 	stats.Record(context.Background(), m.M(1))
 
 	// counter, prometheus way
@@ -487,7 +485,7 @@ func TestShareDefaultRegistry(t *testing.T) {
 	var output string
 	for {
 		time.Sleep(10 * time.Millisecond)
-		if i == 1000 {
+		if i == 10 {
 			t.Fatal("no output at /metrics (10s wait)")
 		}
 		i++

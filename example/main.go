@@ -79,6 +79,6 @@ func main() {
 
 	addr := ":9999"
 	log.Printf("Serving at %s", addr)
-	http.Handle("/metrics", promhttp.Handler())
+	http.Handle("/metrics", exporter)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }

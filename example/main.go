@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"contrib.go.opencensus.io/exporter/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 )
@@ -79,6 +78,6 @@ func main() {
 
 	addr := ":9999"
 	log.Printf("Serving at %s", addr)
-	http.Handle("/metrics", promhttp.Handler())
+	http.Handle("/metrics", exporter)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }

@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"contrib.go.opencensus.io/exporter/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 )

@@ -93,3 +93,12 @@ install-tools:
 	go get -u golang.org/x/tools/cmd/cover
 	go get -u golang.org/x/lint/golint
 	go get -u github.com/rakyll/embedmd
+
+.PHONY: ci-test
+ci-test:
+	docker-compose -f docker/docker-compose.yml up \
+		--force-recreate \
+    	--abort-on-container-exit \
+    	--exit-code-from app \
+    	--build
+

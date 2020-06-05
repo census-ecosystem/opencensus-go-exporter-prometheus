@@ -23,10 +23,12 @@ import (
 	"testing"
 	"time"
 
+	"go.opencensus.io/resource"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -291,78 +293,27 @@ func TestHistogramUnorderedBucketBounds(t *testing.T) {
 }
 
 func TestConstLabelsIncluded(t *testing.T) {
-	constLabels := prometheus.Labels{
-		"service": "spanner",
-	}
-	measureLabel, _ := tag.NewKey("method")
-
-	exporter, err := NewExporter(Options{
-		ConstLabels: constLabels,
-	})
-	if err != nil {
-		t.Fatalf("failed to create prometheus exporter: %v", err)
-	}
-
-	names := []string{"foo", "bar", "baz"}
-
-	var measures mSlice
-	for _, name := range names {
-		measures.createAndAppend("tests/"+name, name, "")
-	}
-
-	var vc vCreator
-	for _, m := range measures {
-		vc.createAndAppend(m.Name(), m.Description(), []tag.Key{measureLabel}, m, view.Count())
-	}
-
-	if err := view.Register(vc...); err != nil {
-		t.Fatalf("failed to create views: %v", err)
-	}
-	defer view.Unregister(vc...)
-
-	ctx, _ := tag.New(context.Background(), tag.Upsert(measureLabel, "issue961"))
-	for _, m := range measures {
-		stats.Record(ctx, m.M(1))
-	}
-
-	srv := httptest.NewServer(exporter)
-	defer srv.Close()
-
-	var i int
-	var output string
-	for {
-		time.Sleep(10 * time.Millisecond)
-		if i == 10 {
-			t.Fatal("no output at /metrics (100ms wait)")
-		}
-		i++
-
-		resp, err := http.Get(srv.URL)
-		if err != nil {
-			t.Fatalf("failed to get /metrics: %v", err)
-		}
-
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatalf("failed to read body: %v", err)
-		}
-		resp.Body.Close()
-
-		output = string(body)
-		if output != "" {
-			break
-		}
-	}
-
-	if strings.Contains(output, "collected before with the same name and label values") {
-		t.Fatal("metric name and labels being duplicated but must be unique")
-	}
-
-	if strings.Contains(output, "error(s) occurred") {
-		t.Fatal("error reported by prometheus registry")
-	}
-
-	want := `# HELP tests_bar bar
+	testCases := []struct {
+		name        string
+		constLabels prometheus.Labels
+		rsrc        resource.Resource
+		want        string
+	}{{
+		name: "neither const labels nor resource",
+		want: `# HELP tests_bar bar
+# TYPE tests_bar counter
+tests_bar{method="issue961"} 1
+# HELP tests_baz baz
+# TYPE tests_baz counter
+tests_baz{method="issue961"} 1
+# HELP tests_foo foo
+# TYPE tests_foo counter
+tests_foo{method="issue961"} 1
+`,
+	}, {
+		name:        "const labels only",
+		constLabels: prometheus.Labels{"service": "spanner"},
+		want: `# HELP tests_bar bar
 # TYPE tests_bar counter
 tests_bar{method="issue961",service="spanner"} 1
 # HELP tests_baz baz
@@ -371,9 +322,127 @@ tests_baz{method="issue961",service="spanner"} 1
 # HELP tests_foo foo
 # TYPE tests_foo counter
 tests_foo{method="issue961",service="spanner"} 1
-`
-	if output != want {
-		t.Fatal("output differed from expected")
+`,
+	}, {
+		name: "resource only",
+		rsrc: resource.Resource{Type: "test resource", Labels: map[string]string{"region": "us-east"}},
+		want: `# HELP tests_bar bar
+# TYPE tests_bar counter
+tests_bar{method="issue961",region="us-east"} 1
+# HELP tests_baz baz
+# TYPE tests_baz counter
+tests_baz{method="issue961",region="us-east"} 1
+# HELP tests_foo foo
+# TYPE tests_foo counter
+tests_foo{method="issue961",region="us-east"} 1
+`,
+	}, {
+		name:        "both const labels and resource",
+		constLabels: prometheus.Labels{"service": "spanner"},
+		rsrc:        resource.Resource{Type: "test resource", Labels: map[string]string{"region": "us-east"}},
+		want: `# HELP tests_bar bar
+# TYPE tests_bar counter
+tests_bar{method="issue961",region="us-east",service="spanner"} 1
+# HELP tests_baz baz
+# TYPE tests_baz counter
+tests_baz{method="issue961",region="us-east",service="spanner"} 1
+# HELP tests_foo foo
+# TYPE tests_foo counter
+tests_foo{method="issue961",region="us-east",service="spanner"} 1
+`,
+	}, {
+		name:        "const labels and resource overlap",
+		constLabels: prometheus.Labels{"service": "spanner"},
+		rsrc:        resource.Resource{Type: "test resource", Labels: map[string]string{"service": "bigtable"}},
+		want: `# HELP tests_bar bar
+# TYPE tests_bar counter
+tests_bar{method="issue961",service="bigtable"} 1
+# HELP tests_baz baz
+# TYPE tests_baz counter
+tests_baz{method="issue961",service="bigtable"} 1
+# HELP tests_foo foo
+# TYPE tests_foo counter
+tests_foo{method="issue961",service="bigtable"} 1
+`,
+	}}
+	measureLabel, _ := tag.NewKey("method")
+
+	for _, testCase := range testCases {
+
+		exporter, err := NewExporter(Options{
+			ConstLabels: testCase.constLabels,
+		})
+		if err != nil {
+			t.Fatalf("failed to create prometheus exporter: %v", err)
+		}
+
+		names := []string{"foo", "bar", "baz"}
+
+		var measures mSlice
+		for _, name := range names {
+			measures.createAndAppend("tests/"+name, name, "")
+		}
+
+		var vc vCreator
+		for _, m := range measures {
+			vc.createAndAppend(m.Name(), m.Description(), []tag.Key{measureLabel}, m, view.Count())
+		}
+
+		meter := view.NewMeter()
+		meter.SetResource(&testCase.rsrc)
+		meter.Start()
+		if err := meter.Register(vc...); err != nil {
+			t.Fatalf("failed to create views: %v", err)
+		}
+		//metricproducer.GlobalManager().DeleteProducer(meter.(metricproducer.Producer))
+		defer meter.Unregister(vc...)
+
+		ctx, _ := tag.New(context.Background(), tag.Upsert(measureLabel, "issue961"))
+		for _, m := range measures {
+			opt := stats.WithRecorder(meter)
+			stats.RecordWithOptions(ctx, opt, stats.WithMeasurements(m.M(1)))
+		}
+
+		srv := httptest.NewServer(exporter)
+		defer srv.Close()
+
+		var i int
+		var output string
+		for {
+			time.Sleep(10 * time.Millisecond)
+			if i == 10 {
+				t.Fatal("no output at /metrics (100ms wait)")
+			}
+			i++
+
+			resp, err := http.Get(srv.URL)
+			if err != nil {
+				t.Fatalf("failed to get /metrics: %v", err)
+			}
+
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("failed to read body: %v", err)
+			}
+			resp.Body.Close()
+
+			output = string(body)
+			if output != "" {
+				break
+			}
+		}
+
+		if strings.Contains(output, "collected before with the same name and label values") {
+			t.Fatal("metric name and labels being duplicated but must be unique")
+		}
+
+		if strings.Contains(output, "error(s) occurred") {
+			t.Fatal("error reported by prometheus registry")
+		}
+		if diff := cmp.Diff(testCase.want, output); diff != "" {
+			t.Errorf("Unexpected prometheus output for test {%s} (-want +got):\n%s", testCase.name, diff)
+		}
+		meter.Unregister(vc...)
 	}
 }
 

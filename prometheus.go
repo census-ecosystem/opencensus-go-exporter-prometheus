@@ -150,11 +150,28 @@ func newCollector(opts Options, registrar prometheus.Registerer) *collector {
 }
 
 func (c *collector) toDesc(metric *metricdata.Metric) *prometheus.Desc {
+	if metric.Resource == nil {
+		return prometheus.NewDesc(
+			metricName(c.opts.Namespace, metric),
+			metric.Descriptor.Description,
+			toPromLabels(metric.Descriptor.LabelKeys),
+			c.opts.ConstLabels)
+
+	}
+
+	resourceLabels := c.opts.ConstLabels
+	if resourceLabels == nil {
+		resourceLabels = prometheus.Labels{}
+	}
+	for k, v := range metric.Resource.Labels {
+		resourceLabels[k] = v
+	}
 	return prometheus.NewDesc(
 		metricName(c.opts.Namespace, metric),
 		metric.Descriptor.Description,
 		toPromLabels(metric.Descriptor.LabelKeys),
-		c.opts.ConstLabels)
+		resourceLabels)
+
 }
 
 type metricExporter struct {

@@ -292,11 +292,11 @@ func TestHistogramUnorderedBucketBounds(t *testing.T) {
 	}
 }
 
-func TestConstLabelsIncluded(t *testing.T) {
+func TestConstLabelsAndResource(t *testing.T) {
 	testCases := []struct {
 		name        string
 		constLabels prometheus.Labels
-		rsrc        resource.Resource
+		resource    *resource.Resource
 		want        string
 	}{{
 		name: "neither const labels nor resource",
@@ -324,8 +324,8 @@ tests_baz{method="issue961",service="spanner"} 1
 tests_foo{method="issue961",service="spanner"} 1
 `,
 	}, {
-		name: "resource only",
-		rsrc: resource.Resource{Type: "test resource", Labels: map[string]string{"region": "us-east"}},
+		name:     "resource only",
+		resource: &resource.Resource{Type: "test resource", Labels: map[string]string{"region": "us-east"}},
 		want: `# HELP tests_bar bar
 # TYPE tests_bar counter
 tests_bar{method="issue961",region="us-east"} 1
@@ -339,7 +339,7 @@ tests_foo{method="issue961",region="us-east"} 1
 	}, {
 		name:        "both const labels and resource",
 		constLabels: prometheus.Labels{"service": "spanner"},
-		rsrc:        resource.Resource{Type: "test resource", Labels: map[string]string{"region": "us-east"}},
+		resource:    &resource.Resource{Type: "test resource", Labels: map[string]string{"region": "us-east"}},
 		want: `# HELP tests_bar bar
 # TYPE tests_bar counter
 tests_bar{method="issue961",region="us-east",service="spanner"} 1
@@ -353,7 +353,7 @@ tests_foo{method="issue961",region="us-east",service="spanner"} 1
 	}, {
 		name:        "const labels and resource overlap",
 		constLabels: prometheus.Labels{"service": "spanner"},
-		rsrc:        resource.Resource{Type: "test resource", Labels: map[string]string{"service": "bigtable"}},
+		resource:    &resource.Resource{Type: "test resource", Labels: map[string]string{"service": "bigtable"}},
 		want: `# HELP tests_bar bar
 # TYPE tests_bar counter
 tests_bar{method="issue961",service="bigtable"} 1
@@ -389,12 +389,11 @@ tests_foo{method="issue961",service="bigtable"} 1
 		}
 
 		meter := view.NewMeter()
-		meter.SetResource(&testCase.rsrc)
+		meter.SetResource(testCase.resource)
 		meter.Start()
 		if err := meter.Register(vc...); err != nil {
 			t.Fatalf("failed to create views: %v", err)
 		}
-		//metricproducer.GlobalManager().DeleteProducer(meter.(metricproducer.Producer))
 		defer meter.Unregister(vc...)
 
 		ctx, _ := tag.New(context.Background(), tag.Upsert(measureLabel, "issue961"))

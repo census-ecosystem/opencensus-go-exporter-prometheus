@@ -7,10 +7,8 @@ require (
 	github.com/prometheus/client_golang v1.2.1
 	github.com/prometheus/procfs v0.0.6 // indirect
 	github.com/prometheus/statsd_exporter v0.15.0
-	go.opencensus.io v0.22.2
+	go.opencensus.io v0.22.4-0.20200608061201-1901b56b9515
 	golang.org/x/sys v0.0.0-20191113165036-4c7a9d0fe056 // indirect
 )
 
 go 1.13
-
-replace go.opencensus.io => /usr/local/google/home/jjzeng/gohack/go.opencensus.io

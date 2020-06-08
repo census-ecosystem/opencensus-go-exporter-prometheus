@@ -160,7 +160,7 @@ func (c *collector) toDesc(metric *metricdata.Metric) *prometheus.Desc {
 		for k, v := range c.opts.ConstLabels {
 			labels[k] = v
 		}
-		// Resource labels overwrite const labels
+		// Resource labels overwrite const labels.
 		for k, v := range metric.Resource.Labels {
 			labels[k] = v
 		}

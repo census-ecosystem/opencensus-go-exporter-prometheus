@@ -364,6 +364,20 @@ tests_baz{method="issue961",service="bigtable"} 1
 # TYPE tests_foo counter
 tests_foo{method="issue961",service="bigtable"} 1
 `,
+	}, {
+		name:        "const labels and resource with overlap and non-overlap",
+		constLabels: prometheus.Labels{"service": "spanner", "account": "test"},
+		resource:    &resource.Resource{Type: "test resource", Labels: map[string]string{"service": "bigtable", "region": "us-east"}},
+		want: `# HELP tests_bar bar
+# TYPE tests_bar counter
+tests_bar{account="test",method="issue961",region="us-east",service="bigtable"} 1
+# HELP tests_baz baz
+# TYPE tests_baz counter
+tests_baz{account="test",method="issue961",region="us-east",service="bigtable"} 1
+# HELP tests_foo foo
+# TYPE tests_foo counter
+tests_foo{account="test",method="issue961",region="us-east",service="bigtable"} 1
+`,
 	}}
 	measureLabel, _ := tag.NewKey("method")
 

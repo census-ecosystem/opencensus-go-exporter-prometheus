@@ -141,13 +141,13 @@ func TestCumulativenessFromHistograms(t *testing.T) {
 		Aggregation: view.Distribution(1, 5, 5, 5, 5, 10, 20, 50, 100, 250),
 	}
 
-	if err := view.Register(v); err != nil {
+	if err = view.Register(v); err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
 	defer view.Unregister(v)
 
 	// Give the reporter ample time to process registration
-	//<-time.After(10 * reportPeriod)
+	// <-time.After(10 * reportPeriod)
 
 	values := []float64{0.25, 245.67, 12, 1.45, 199.9, 7.69, 187.12}
 	// We want the results that look like this:
@@ -180,7 +180,7 @@ func TestCumulativenessFromHistograms(t *testing.T) {
 	stats.Record(ctx, ms...)
 
 	// Give the recorder ample time to process recording
-	//<-time.After(10 * reportPeriod)
+	// <-time.After(10 * reportPeriod)
 
 	cst := httptest.NewServer(exporter)
 	defer cst.Close()
@@ -225,13 +225,13 @@ func TestHistogramUnorderedBucketBounds(t *testing.T) {
 		Aggregation: view.Distribution(10, 5, 1, 1, 50, 5, 20, 100, 250),
 	}
 
-	if err := view.Register(v); err != nil {
+	if err = view.Register(v); err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
 	defer view.Unregister(v)
 
 	// Give the reporter ample time to process registration
-	//<-time.After(10 * reportPeriod)
+	// <-time.After(10 * reportPeriod)
 
 	values := []float64{0.25, 245.67, 12, 1.45, 199.9, 7.69, 187.12}
 	// We want the results that look like this:
@@ -264,7 +264,7 @@ func TestHistogramUnorderedBucketBounds(t *testing.T) {
 	stats.Record(ctx, ms...)
 
 	// Give the recorder ample time to process recording
-	//<-time.After(10 * reportPeriod)
+	// <-time.After(10 * reportPeriod)
 
 	cst := httptest.NewServer(exporter)
 	defer cst.Close()

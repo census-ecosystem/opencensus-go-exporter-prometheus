@@ -45,6 +45,6 @@ lint:
 
 .PHONY: install-tools
 install-tools:
-	go install golang.org/x/tools/cmd/cover
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint
+	cd internal/tools && go install golang.org/x/tools/cmd/cover
+	cd internal/tools && go install github.com/golangci/golangci-lint/cmd/golangci-lint
 

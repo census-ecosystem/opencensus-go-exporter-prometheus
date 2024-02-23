@@ -609,3 +609,96 @@ prom_counter 1
 	}
 
 }
+
+func TestInternalMetricsWithoutConstLabels(t *testing.T) {
+	constLabels := prometheus.Labels{
+		"service": "spanner",
+	}
+	instanceLabel, _ := tag.NewKey("instance")
+
+	exporter, err := NewExporter(Options{
+		ConstLabels: constLabels,
+	})
+	if err != nil {
+		t.Fatalf("failed to create prometheus exporter: %v", err)
+	}
+
+	names := []string{"tests/foo", "tests/bar", "tests/baz", "tests/up", "up"}
+
+	var measures mSlice
+	for _, name := range names {
+		measures.createAndAppend(name, name, "")
+	}
+
+	var vc vCreator
+	for _, m := range measures {
+		vc.createAndAppend(m.Name(), m.Description(), []tag.Key{instanceLabel}, m, view.Count())
+	}
+
+	if err := view.Register(vc...); err != nil {
+		t.Fatalf("failed to create views: %v", err)
+	}
+	defer view.Unregister(vc...)
+
+	ctx, _ := tag.New(context.Background(), tag.Upsert(instanceLabel, "localhost:9999"))
+	for _, m := range measures {
+		stats.Record(ctx, m.M(1))
+	}
+
+	srv := httptest.NewServer(exporter)
+	defer srv.Close()
+
+	var i int
+	var output string
+	for {
+		time.Sleep(10 * time.Millisecond)
+		if i == 10 {
+			t.Fatal("no output at /metrics (100ms wait)")
+		}
+		i++
+
+		resp, err := http.Get(srv.URL)
+		if err != nil {
+			t.Fatalf("failed to get /metrics: %v", err)
+		}
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("failed to read body: %v", err)
+		}
+		resp.Body.Close()
+
+		output = string(body)
+		if output != "" {
+			break
+		}
+	}
+
+	if strings.Contains(output, "collected before with the same name and label values") {
+		t.Fatal("metric name and labels being duplicated but must be unique")
+	}
+
+	if strings.Contains(output, "error(s) occurred") {
+		t.Fatal("error reported by prometheus registry")
+	}
+
+	want := `# HELP tests_bar bar
+# TYPE tests_bar counter
+tests_bar{instance="localhost:9999",service="spanner"} 1
+# HELP tests_baz baz
+# TYPE tests_baz counter
+tests_baz{instance="localhost:9999",service="spanner"} 1
+# HELP tests_foo foo
+# TYPE tests_foo counter
+tests_foo{instance="localhost:9999",service="spanner"} 1
+# HELP tests_up tests/up
+# TYPE tests_up counter
+tests_up{instance="localhost:9999",service="spanner"} 1
+# HELP up up
+# TYPE up counter
+up{instance="localhost:9999"} 1
+`
+	if output != want {
+		t.Fatalf("output differed from expected\nGot:\n%q\nWant:\n%q", output, want)
+	}
+}

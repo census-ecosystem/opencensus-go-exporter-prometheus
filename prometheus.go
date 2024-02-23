@@ -148,7 +148,24 @@ func newCollector(opts Options, registrar prometheus.Registerer) *collector {
 		reader: metricexport.NewReader()}
 }
 
+func isInternalMetric(metricName string) bool {
+	return metricName == "up"
+}
+
 func (c *collector) toDesc(metric *metricdata.Metric) *prometheus.Desc {
+	if isInternalMetric(metric.Descriptor.Name) {
+		// Internal metrics should not have any namespace
+		// prefixes, nor any const labels attached to them,
+		// but instead just set as they are, to allow the exporter
+		// to operate as if it were a passthrough.
+		// See https://github.com/open-telemetry/wg-prometheus/issues/8
+		return prometheus.NewDesc(
+			metric.Descriptor.Name,
+			metric.Descriptor.Description,
+			toPromLabels(metric.Descriptor.LabelKeys),
+			nil)
+	}
+
 	var labels prometheus.Labels
 	switch {
 	case metric.Resource == nil:
